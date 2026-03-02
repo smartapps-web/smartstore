@@ -215,22 +215,21 @@ function save() {
 
 // --- 3. FUNGSI TOMBOL UPLOAD (MANUAL) ---
 function syncToCloud() {
-    const statusTxt = document.getElementById('text-status');
-    if(statusTxt) statusTxt.innerText = "Syncing...";
+    // KUNCI PENGAMAN: Jika products dan transactions kosong, JANGAN UPLOAD.
+    // Ini biar data di Cloud nggak terhapus sama variabel kosong saat baru buka aplikasi.
+if (products.length === 0 && transactions.length === 0) {
+    alert("❌ Gagal Upload: Data di laptop masih kosong! Tunggu sinkronisasi Cloud selesai atau input barang dulu, Bro.");
+    return; 
+}
 
     const allData = {
         products, transactions, expenses, users, finance,
         lastUpdate: new Date().toLocaleString('id-ID')
-    };
+    }
 
     dbRefSmartStore.set(allData)
-        .then(() => {
-            alert("🚀 MANTAP BRO! Data SmartStore sudah AMAN di Cloud!");
-            if(statusTxt) statusTxt.innerText = "Online";
-        })
-        .catch((error) => {
-            alert("Gagal Upload Bro: " + error.message);
-        });
+        .then(() => console.log("✅ Cloud Sync Berhasil"))
+        .catch((err) => console.error("❌ Gagal Sync:", err));
 }
 
 // --- 4. FUNGSI TOMBOL DOWNLOAD (MANUAL) ---
@@ -508,7 +507,39 @@ function load() {
         function showNotaModal(id, time, items, total) { document.getElementById('nota-id').innerText = id; document.getElementById('nota-time').innerText = time; document.getElementById('nota-total').innerText = "Rp "+total.toLocaleString(); document.getElementById('nota-user').innerText = currentUser.fullname; document.getElementById('nota-items').innerHTML = items.map(i => `<div class="flex justify-between"><span>${i.name} x${i.qty}</span><span>${(i.price*i.qty).toLocaleString()}</span></div>`).join(''); document.getElementById('modal-nota').classList.add('active'); }
         function closeModalNota() { document.getElementById('modal-nota').classList.remove('active'); }
         function removeCart(id) { cart = cart.filter(c => c.id != id); render(); }
-        function exportFullDatabase() { const data = { products, transactions, expenses, users, finance }; const blob = new Blob([JSON.stringify(data)], {type: "application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Backup.json`; a.click(); }
+        // FUNGSI DOWNLOAD BACKUP LOKAL DENGAN TIMESTAMP
+function exportFullDatabase() {
+    // 1. Kumpulkan semua data
+    const allData = {
+        products,
+        transactions,
+        expenses,
+        users,
+        finance,
+        exportDate: new Date().toISOString()
+    };
+
+    // 2. Buat Format Timestamp (Tahun-Bulan-Tanggal_Jam-Menit)
+    const now = new Date();
+    const timestamp = now.getFullYear() + "-" + 
+                      String(now.getMonth() + 1).padStart(2, '0') + "-" + 
+                      String(now.getDate()).padStart(2, '0') + "_" + 
+                      String(now.getHours()).padStart(2, '0') + "-" + 
+                      String(now.getMinutes()).padStart(2, '0');
+
+    const fileName = `smartstore_${timestamp}.json`;
+
+    // 3. Proses Download File
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allData, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", fileName);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+
+    alert("✅ Backup Lokal Berhasil! Nama file: " + fileName);
+}
         function importFullDatabase(e) { const reader = new FileReader(); reader.onload = (ev) => { const d = JSON.parse(ev.target.result); if(confirm("Restore database?")) { products=d.products; transactions=d.transactions; expenses=d.expenses; users=d.users; finance=d.finance; save(); location.reload(); } }; reader.readAsText(e.target.files[0]); }
         function exportToExcel() { const data = products.map(p => ({ ID: p.id.toString(), Nama: p.name, Satuan: p.unit, Stok: p.stock, Beli: p.buy, Jual: p.price })); const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Stok"); XLSX.writeFile(wb, "Stok.xlsx"); }
         function importFromExcel(event) { const file = event.target.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = (e) => { const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'}); const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]); if(confirm("Import?")) { products = jsonData.map(i => ({ id: i.ID || Date.now()+Math.random(), name: i.Nama || i.Nama_Barang, unit: i.Satuan || "Pcs", stock: parseInt(i.Stok) || 0, buy: parseInt(i.Beli || i.Harga_Beli) || 0, price: parseInt(i.Jual || i.Harga_Jual) || 0 })); save(); render(); } }; reader.readAsArrayBuffer(file); }
