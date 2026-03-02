@@ -233,10 +233,10 @@ function syncToCloud() {
         });
 }
 
-// --- 4. FUNGSI TOMBOL DOWNLOAD ---
+// --- 4. FUNGSI TOMBOL DOWNLOAD (MANUAL) ---
 function pullFromCloud() {
     if(!confirm("Hati-hati Bro! Data di laptop ini akan diganti dengan data dari Cloud. Lanjut?")) return;
-
+    
     dbRefSmartStore.once('value').then((snapshot) => {
         const data = snapshot.val();
         if (data) {
@@ -245,17 +245,46 @@ function pullFromCloud() {
             expenses = data.expenses || [];
             users = data.users || [];
             finance = data.finance || {in:0, out:0, costOfSales:0};
-            
-            save(); // Simpan ke LocalStorage agar sinkron
-            render(); // Refresh Tampilan
-            alert("✅ Data Berhasil Ditarik dari Cloud!");
-        } else {
-            alert("Data di Cloud masih kosong, Bro!");
+            save(); 
+            render();
+            alert("✅ Data Berhasil Ditarik!");
         }
     });
 }
 
-// UPDATE STATUS KONEKSI
+// --- 5. FITUR REALTIME AUTO-UPDATE (TANPA REFRESH) ---
+// TARUH DI LUAR FUNGSI APAPUN AGAR JALAN OTOMATIS SAAT APLIKASI DIBUKA
+dbRefSmartStore.on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+        console.log("🔄 Data Baru Terdeteksi dari HP/Cloud! Memperbarui Tampilan...");
+        
+        // Update variabel
+        products = data.products || [];
+        transactions = data.transactions || [];
+        expenses = data.expenses || [];
+        users = data.users || [];
+        finance = data.finance || {in:0, out:0, costOfSales:0};
+
+        // Simpan ke Lokal
+        localStorage.setItem(DB_KEY_PROD, JSON.stringify(products));
+        localStorage.setItem(DB_KEY_FIN, JSON.stringify(finance));
+        localStorage.setItem(DB_KEY_TX, JSON.stringify(transactions));
+        localStorage.setItem(DB_KEY_EXP, JSON.stringify(expenses));
+        localStorage.setItem(DB_KEY_USER, JSON.stringify(users));
+
+        // Update Tampilan Otomatis
+        render(); 
+        
+        // Update Status Mini Dot di Logo (Biar Lampunya Kedip Hijau)
+        const miniDot = document.getElementById('dot-status-mini');
+        if(miniDot) miniDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+    }
+}, (error) => {
+    console.error("Gagal dengerin update cloud:", error);
+});
+
+// --- 6. UPDATE STATUS KONEKSI ---
 db.ref(".info/connected").on("value", (snap) => {
     const dot = document.getElementById('dot-status');
     const txt = document.getElementById('text-status');
