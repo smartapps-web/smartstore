@@ -197,40 +197,34 @@ const db = firebase.database();
 const dbRefSmartStore = db.ref("smartstore"); // Folder kusus SmartStore
 
 // --- 2. FUNGSI SAVE (WAJIB UPDATE AGAR AUTO-SYNC) ---
+// 1. FUNGSI SIMPAN LOKAL (Hanya untuk memori PC/HP sendiri)
 function save() {
-    // Simpan ke HP/Laptop (Offline)
     localStorage.setItem(DB_KEY_PROD, JSON.stringify(products));
     localStorage.setItem(DB_KEY_FIN, JSON.stringify(finance));
     localStorage.setItem(DB_KEY_TX, JSON.stringify(transactions));
     localStorage.setItem(DB_KEY_EXP, JSON.stringify(expenses));
     localStorage.setItem(DB_KEY_USER, JSON.stringify(users));
-    
-    // OTOMATIS KIRIM KE CLOUD (Setiap ada perubahan)
+    // JANGAN taruh syncToCloud() di sini agar tidak otomatis nimpa cloud saat baru buka!
+}
+
+// 2. FUNGSI UPLOAD CLOUD (Hanya jalan kalau kamu Klik Tombol atau Checkout Berhasil)
+function syncToCloud() {
+    // PENGAMAN 1: Jangan upload kalau data benar-benar kosong (Pencegahan PC Baru)
+    if (products.length === 0 && transactions.length === 0) {
+        console.warn("Sedang menunggu data dari Cloud, upload dibatalkan agar tidak nimpa.");
+        return; 
+    }
+
     const allData = {
         products, transactions, expenses, users, finance,
         lastUpdate: new Date().toLocaleString('id-ID')
     };
-    dbRefSmartStore.set(allData).catch(err => console.error("Auto-sync gagal:", err));
-}
-
-// --- 3. FUNGSI TOMBOL UPLOAD (MANUAL) ---
-function syncToCloud() {
-    // KUNCI PENGAMAN: Jika products dan transactions kosong, JANGAN UPLOAD.
-    // Ini biar data di Cloud nggak terhapus sama variabel kosong saat baru buka aplikasi.
-if (products.length === 0 && transactions.length === 0) {
-    alert("❌ Gagal Upload: Data di laptop masih kosong! Tunggu sinkronisasi Cloud selesai atau input barang dulu, Bro.");
-    return; 
-}
-
-    const allData = {
-        products, transactions, expenses, users, finance,
-        lastUpdate: new Date().toLocaleString('id-ID')
-    }
 
     dbRefSmartStore.set(allData)
-        .then(() => console.log("✅ Cloud Sync Berhasil"))
-        .catch((err) => console.error("❌ Gagal Sync:", err));
+        .then(() => console.log("Cloud Updated!"))
+        .catch(err => console.error("Sync Gagal:", err));
 }
+
 
 // --- 4. FUNGSI TOMBOL DOWNLOAD (MANUAL) ---
 function pullFromCloud() {
@@ -492,7 +486,43 @@ function load() {
             const logs = [...transactions.map(t=>({t:t.time, m:'Sales: '+t.id, v:t.total, type:'in'})), ...expenses.map(e=>({t:e.time, m:'Biaya: '+e.name, v:e.val, type:'out'}))].sort((a,b)=>new Date(b.t)-new Date(a.t)).slice(0,10);
             document.getElementById('log-flow').innerHTML = logs.map(l => `<div class="flex justify-between items-center bg-slate-50/50 p-2 rounded-xl border border-transparent hover:border-indigo-100 italic font-bold"><div class="flex items-center gap-2"><div class="w-6 h-6 rounded-lg ${l.type==='in'?'bg-green-100 text-green-600':'bg-red-100 text-red-600'} flex items-center justify-center text-[8px]"><i class="fas ${l.type==='in'?'fa-plus':'fa-minus'}"></i></div><span class="text-[10px] uppercase font-black text-slate-600 tracking-tighter">${l.m}</span></div><div class="text-right font-mono"><span class="block text-[10px] font-black ${l.type==='in'?'text-green-600':'text-red-600'}">Rp ${l.v.toLocaleString()}</span><span class="text-[7px] text-slate-300 uppercase">${l.t.split(' ')[1]}</span></div></div>`).join('');
         }
-        function checkout() { if(cart.length === 0) return; let omset = cart.reduce((a,b) => a + (b.price * b.qty), 0); let hpp = cart.reduce((a,b) => a + (b.buy * b.qty), 0); const txId = "TRX-" + Date.now(); const time = new Date().toLocaleString('id-ID'); cart.forEach(c => { products.find(p => p.id == c.id).stock -= c.qty; }); transactions.unshift({ id: txId, time, items: [...cart], total: omset, modal: hpp, user: currentUser.fullname }); finance.in += omset; finance.costOfSales += hpp; showNotaModal(txId, time, cart, omset); cart = []; render(); save(); }
+function checkout() {
+    if(cart.length === 0) return;
+    
+    let omset = cart.reduce((a, b) => a + (b.price * b.qty), 0);
+    let hpp = cart.reduce((a, b) => a + (b.buy * b.qty), 0);
+    const txId = "TRX-" + Date.now();
+    const time = new Date().toLocaleString('id-ID');
+    
+    // Potong stok barang
+    cart.forEach(c => {
+        const p = products.find(prod => prod.id == c.id);
+        if(p) p.stock -= c.qty;
+    });
+
+    // Masukkan ke riwayat transaksi
+    transactions.unshift({ 
+        id: txId, 
+        time, 
+        items: [...cart], 
+        total: omset, 
+        modal: hpp, 
+        user: currentUser.fullname 
+    });
+
+    // Update saldo keuangan
+    finance.in += omset;
+    finance.costOfSales += hpp;
+
+    // --- BAGIAN KRUSIAL ---
+    save();        // Simpan ke memori browser (Offline)
+    syncToCloud(); // Langsung tembak ke Firebase (Online)
+    // ----------------------
+
+    showNotaModal(txId, time, cart, omset);
+    cart = [];
+    render();
+}
         function renderExpenses() { document.getElementById('expense-table-body').innerHTML = expenses.map(e => `<tr class="hover:bg-slate-50 text-center text-xs font-bold italic transition-all"><td class="p-4 font-mono text-slate-400 text-[9px]">${e.time}</td><td class="text-left pl-4 font-black uppercase text-indigo-900">${e.name}</td><td class="text-right font-black text-red-600 pr-6 italic font-mono text-[11px]">Rp ${e.val.toLocaleString()}</td><td class="text-[8px] uppercase font-black text-slate-300 tracking-widest">${e.user || '-'}</td><td class="p-4 text-center"><button onclick="deleteExpense('${e.id}')" class="text-red-200 hover:text-red-600"><i class="fas fa-trash-alt text-[9px]"></i></button></td></tr>`).join(''); }
         function showModalExpense() { document.getElementById('modal-expense').classList.add('active'); }
         function closeModalExpense() { document.getElementById('modal-expense').classList.remove('active'); }
@@ -540,7 +570,35 @@ function exportFullDatabase() {
 
     alert("✅ Backup Lokal Berhasil! Nama file: " + fileName);
 }
-        function importFullDatabase(e) { const reader = new FileReader(); reader.onload = (ev) => { const d = JSON.parse(ev.target.result); if(confirm("Restore database?")) { products=d.products; transactions=d.transactions; expenses=d.expenses; users=d.users; finance=d.finance; save(); location.reload(); } }; reader.readAsText(e.target.files[0]); }
+
+function importFullDatabase(e) { 
+    const reader = new FileReader(); 
+    reader.onload = (ev) => { 
+        try {
+            const d = JSON.parse(ev.target.result); 
+            if(confirm("Restore database? Data di Cloud akan ikut diperbarui.")) { 
+                products = d.products || []; 
+                transactions = d.transactions || []; 
+                expenses = d.expenses || []; 
+                users = d.users || []; 
+                finance = d.finance || {in:0,out:0,costOfSales:0}; 
+                
+                // 1. Simpan ke LocalStorage
+                save(); 
+
+                // 2. PAKSA UPLOAD KE CLOUD (Penting agar data Cloud tidak kosong)
+                dbRefSmartStore.set(d).then(() => {
+                    alert("✅ Restore Berhasil & Cloud Sinkron!");
+                    location.reload(); 
+                });
+            } 
+        } catch (err) {
+            alert("❌ File tidak valid!");
+        }
+    }; 
+    reader.readAsText(e.target.files[0]); 
+}
+
         function exportToExcel() { const data = products.map(p => ({ ID: p.id.toString(), Nama: p.name, Satuan: p.unit, Stok: p.stock, Beli: p.buy, Jual: p.price })); const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Stok"); XLSX.writeFile(wb, "Stok.xlsx"); }
         function importFromExcel(event) { const file = event.target.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = (e) => { const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'}); const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]); if(confirm("Import?")) { products = jsonData.map(i => ({ id: i.ID || Date.now()+Math.random(), name: i.Nama || i.Nama_Barang, unit: i.Satuan || "Pcs", stock: parseInt(i.Stok) || 0, buy: parseInt(i.Beli || i.Harga_Beli) || 0, price: parseInt(i.Jual || i.Harga_Jual) || 0 })); save(); render(); } }; reader.readAsArrayBuffer(file); }
         function viewTx(id) { const tx = transactions.find(t => t.id === id); showNotaModal(tx.id, tx.time, tx.items, tx.total); }
