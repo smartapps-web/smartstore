@@ -141,17 +141,39 @@
             <div id="tab-pengeluaran" class="tab-content h-full overflow-hidden"><div class="bg-white rounded-3xl shadow-md border flex flex-col h-full"><div class="p-3 bg-red-50/50 flex justify-between items-center font-black text-red-700 uppercase italic text-[10px]">PENGELUARAN<button onclick="showModalExpense()" class="bg-red-500 text-white px-4 py-2 rounded-xl shadow">+ Tambah</button></div><div class="overflow-y-auto flex-1"><table class="w-full text-left"><thead class="bg-slate-50 text-[10px] uppercase border-b font-black text-slate-400"><tr><th class="p-4 text-center">Waktu</th><th class="text-left">Keterangan</th><th class="text-right">Nominal</th><th class="p-4 text-center">PIC</th><th class="p-4 text-center">Aksi</th></tr></thead><tbody id="expense-table-body" class="divide-y text-[11px] font-bold italic"></tbody></table></div></div></div>
             <div id="tab-cashflow" class="tab-content h-full overflow-y-auto"><div class="grid grid-cols-4 gap-3 mb-6 font-black" id="summary-cards"></div><div class="bg-white rounded-3xl border p-5 shadow-sm"><h3 class="font-black mb-4 text-[9px] text-slate-400 italic uppercase border-b pb-2 tracking-widest">Log Keuangan</h3><div id="log-flow" class="space-y-2"></div></div></div>
             <div id="tab-users" class="tab-content h-full overflow-y-auto"><div class="bg-white rounded-3xl border shadow-md overflow-hidden"><div class="p-4 bg-indigo-50 flex justify-between items-center font-black text-indigo-950 uppercase italic text-[11px]">User Manajer<button onclick="showModalUser()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl shadow">+ User Baru</button></div><table class="w-full text-left"><thead class="bg-slate-50 text-[10px] uppercase border-b font-black text-slate-400"><tr><th class="p-6">Username</th><th class="p-6">Nama Lengkap</th><th class="p-6 text-center">Akses</th><th class="p-6 text-center">Aksi</th></tr></thead><tbody id="user-table-body" class="divide-y text-xs italic font-bold"></tbody></table></div></div>
-            <div id="tab-backup" class="tab-content h-full overflow-y-auto p-10">
-    <div class="max-w-4xl mx-auto space-y-6">
-        <div class="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-8 border-indigo-600 text-center">
-            <h3 class="font-black italic text-xs uppercase mb-4">Cloud Sync (Firebase)</h3>
-            <div class="flex gap-4">
-                <button onclick="syncToCloud()" class="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] shadow">Upload Ke Cloud</button>
-                <button onclick="pullFromCloud()" class="flex-1 bg-indigo-950 text-white py-4 rounded-2xl font-black uppercase text-[10px] shadow">Download Dari Cloud</button>
+ 
+ 
+ <div id="tab-backup" class="tab-content h-full overflow-y-auto p-10">
+    <div class="max-w-4xl mx-auto space-y-6 text-center">
+        
+        <div class="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-8 border-indigo-600">
+            <div class="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl mx-auto mb-4 flex items-center justify-center text-xl shadow-inner">
+                <i class="fas fa-cloud"></i>
+            </div>
+            <h3 class="font-black italic text-xs uppercase mb-2">Pusat Data Cloud</h3>
+            <p class="text-[9px] text-slate-400 italic mb-6">Sinkronkan data langsung ke Server Firebase (Online)</p>
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="syncToCloud()" class="bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all">Upload ke Cloud</button>
+                <button onclick="pullFromCloud()" class="bg-indigo-950 text-white py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all">Download dari Cloud</button>
             </div>
         </div>
+
+        <div class="grid grid-cols-2 gap-6">
+            <div class="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-8 border-pink-500">
+                <h3 class="font-black italic text-xs uppercase mb-4">Simpan File Lokal</h3>
+                <button onclick="exportFullDatabase()" class="w-full bg-slate-100 text-slate-800 py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-pink-50 hover:text-pink-600 transition-all">Download File .JSON</button>
+            </div>
+            <div class="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-8 border-yellow-500">
+                <h3 class="font-black italic text-xs uppercase mb-4">Upload File Lokal</h3>
+                <input type="file" id="restore-input" class="hidden" onchange="importFullDatabase(event)">
+                <button onclick="document.getElementById('restore-input').click()" class="w-full bg-yellow-500 text-white py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95">Pilih & Restore File</button>
+            </div>
         </div>
+
+    </div>
 </div>
+
+
 
     </main>
 
@@ -163,40 +185,58 @@
 
     <script>
 	
-// --- DATABASE URL SESUAI KANGKREDIT ---
+// --- 1. KONFIGURASI FIREBASE (WAJIB DI ATAS) ---
 const firebaseConfig = { 
     databaseURL: "https://bus-managemen-5fca8-default-rtdb.asia-southeast1.firebasedatabase.app/", 
     projectId: "bus-managemen-5fca8" 
 };
 
+// Inisialisasi Firebase
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-const dbRefSmartStore = db.ref("smartstore");
+const dbRefSmartStore = db.ref("smartstore"); // Folder kusus SmartStore
 
-// FUNGSI SINKRONISASI
+// --- 2. FUNGSI SAVE (WAJIB UPDATE AGAR AUTO-SYNC) ---
+function save() {
+    // Simpan ke HP/Laptop (Offline)
+    localStorage.setItem(DB_KEY_PROD, JSON.stringify(products));
+    localStorage.setItem(DB_KEY_FIN, JSON.stringify(finance));
+    localStorage.setItem(DB_KEY_TX, JSON.stringify(transactions));
+    localStorage.setItem(DB_KEY_EXP, JSON.stringify(expenses));
+    localStorage.setItem(DB_KEY_USER, JSON.stringify(users));
+    
+    // OTOMATIS KIRIM KE CLOUD (Setiap ada perubahan)
+    const allData = {
+        products, transactions, expenses, users, finance,
+        lastUpdate: new Date().toLocaleString('id-ID')
+    };
+    dbRefSmartStore.set(allData).catch(err => console.error("Auto-sync gagal:", err));
+}
+
+// --- 3. FUNGSI TOMBOL UPLOAD (MANUAL) ---
 function syncToCloud() {
     const statusTxt = document.getElementById('text-status');
     if(statusTxt) statusTxt.innerText = "Syncing...";
 
     const allData = {
-        products: products,
-        transactions: transactions,
-        expenses: expenses,
-        users: users,
-        finance: finance,
+        products, transactions, expenses, users, finance,
         lastUpdate: new Date().toLocaleString('id-ID')
     };
 
     dbRefSmartStore.set(allData)
         .then(() => {
+            alert("🚀 MANTAP BRO! Data SmartStore sudah AMAN di Cloud!");
             if(statusTxt) statusTxt.innerText = "Online";
-            console.log("Cloud Updated");
         })
-        .catch((error) => console.error("Sync Error: ", error));
+        .catch((error) => {
+            alert("Gagal Upload Bro: " + error.message);
+        });
 }
 
+// --- 4. FUNGSI TOMBOL DOWNLOAD ---
 function pullFromCloud() {
-    if(!confirm("Data lokal akan diganti dengan data Cloud. Lanjut?")) return;
+    if(!confirm("Hati-hati Bro! Data di laptop ini akan diganti dengan data dari Cloud. Lanjut?")) return;
+
     dbRefSmartStore.once('value').then((snapshot) => {
         const data = snapshot.val();
         if (data) {
@@ -205,8 +245,12 @@ function pullFromCloud() {
             expenses = data.expenses || [];
             users = data.users || [];
             finance = data.finance || {in:0, out:0, costOfSales:0};
-            save(); render();
-            alert("✅ Data Berhasil Ditarik!");
+            
+            save(); // Simpan ke LocalStorage agar sinkron
+            render(); // Refresh Tampilan
+            alert("✅ Data Berhasil Ditarik dari Cloud!");
+        } else {
+            alert("Data di Cloud masih kosong, Bro!");
         }
     });
 }
@@ -236,44 +280,56 @@ db.ref(".info/connected").on("value", (snap) => {
         let products = [], transactions = [], expenses = [], users = [], cart = [], currentUser = null;
         let finance = { in: 0, out: 0, costOfSales: 0 };
 
-        function load() {
-            const currentP = localStorage.getItem(DB_KEY_PROD);
-            if(currentP) {
-                products = JSON.parse(currentP);
-                finance = JSON.parse(localStorage.getItem(DB_KEY_FIN)) || {in:0,out:0,costOfSales:0};
-                transactions = JSON.parse(localStorage.getItem(DB_KEY_TX)) || [];
-                expenses = JSON.parse(localStorage.getItem(DB_KEY_EXP)) || [];
-                users = JSON.parse(localStorage.getItem(DB_KEY_USER)) || [];
-            } else {
-                users = [{ username: 'azka', fullname: 'Azka Yusuf Sholeh', password: '123', role: 'Superadmin' }];
-                save();
-            }
+function load() {
+    // 1. Baca data dari Local Storage (Offline Backup)
+    const currentP = localStorage.getItem(DB_KEY_PROD);
+    if(currentP) {
+        products = JSON.parse(currentP);
+        finance = JSON.parse(localStorage.getItem(DB_KEY_FIN)) || {in:0,out:0,costOfSales:0};
+        transactions = JSON.parse(localStorage.getItem(DB_KEY_TX)) || [];
+        expenses = JSON.parse(localStorage.getItem(DB_KEY_EXP)) || [];
+        users = JSON.parse(localStorage.getItem(DB_KEY_USER)) || [];
+    } else {
+        users = [{ username: 'azka', fullname: 'Azka Yusuf Sholeh', password: '123', role: 'Superadmin' }];
+        save();
+    }
 
-            const sess = localStorage.getItem(DB_KEY_SESS);
-            if(sess) {
-                const found = users.find(u => u.username === sess);
-                if(found) {
-                    currentUser = found;
-                    document.getElementById('login-screen').classList.add('hidden');
-                    document.getElementById('active-user-display').innerText = found.fullname;
-                    if(found.role === 'Superadmin') document.getElementById('admin-only-menu').classList.remove('hidden');
-                    else document.getElementById('admin-only-menu').classList.add('hidden');
-                    render();
-                }
-            }
+    // 2. Cek Sesi Login
+    const sess = localStorage.getItem(DB_KEY_SESS);
+    if(sess) {
+        const found = users.find(u => u.username === sess);
+        if(found) {
+            currentUser = found;
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('active-user-display').innerText = found.fullname;
+            if(found.role === 'Superadmin') document.getElementById('admin-only-menu').classList.remove('hidden');
+            else document.getElementById('admin-only-menu').classList.add('hidden');
+            render();
         }
+    }
 
- // MODIFIKASI FUNGSI SAVE AGAR AUTO-SYNC
-function save() {
-    localStorage.setItem(DB_KEY_PROD, JSON.stringify(products));
-    localStorage.setItem(DB_KEY_FIN, JSON.stringify(finance));
-    localStorage.setItem(DB_KEY_TX, JSON.stringify(transactions));
-    localStorage.setItem(DB_KEY_EXP, JSON.stringify(expenses));
-    localStorage.setItem(DB_KEY_USER, JSON.stringify(users));
-    
-    // Panggil sinkronisasi otomatis ke Firebase setiap ada perubahan
-    syncToCloud(); 
-}
+    // 3. TARIK DATA DARI CLOUD (SINKRONISASI OTOMATIS SAAT START)
+    // Taruh di dalam fungsi load agar jalan setiap kali aplikasi dibuka
+    if (typeof dbRefSmartStore !== 'undefined') {
+        dbRefSmartStore.once('value').then((snap) => {
+            const d = snap.val();
+            if(d) {
+                products = d.products || [];
+                transactions = d.transactions || [];
+                expenses = d.expenses || [];
+                users = d.users || [];
+                finance = d.finance || {in:0,out:0,costOfSales:0};
+                
+                // Simpan ke local agar saat offline data terbaru tetap ada
+                save(); 
+                render(); 
+                console.log("🚀 Data Cloud Berhasil Sinkron!");
+            }
+        }).catch(err => console.error("Gagal sinkron cloud:", err));
+    }
+} // <--- KURUNG PENUTUP FUNGSI LOAD HARUS DI SINI
+
+
 
         function handleLogin() {
             const u = document.getElementById('login-user').value;
@@ -435,4 +491,5 @@ function save() {
         load();
     </script>
 </body>
+
 </html>
